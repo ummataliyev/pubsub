@@ -7,6 +7,7 @@ import pydantic
 from redis.asyncio import Redis
 
 from database import storage
+from database import redis
 
 app = fastapi.FastAPI()
 
@@ -36,19 +37,9 @@ async def get_messages():
         raise fastapi.HTTPException(status_code=500, detail=str(e))
 
 
-async def listen_redis():
-    pubsub = redis_client.pubsub()
-    await pubsub.subscribe("messages")
-    async for message in pubsub.listen():
-        if message["type"] == "message":
-            print(message)
-            await storage.processor.insert_message(message['data'].decode())
-            print(f"Received message: {message['data'].decode()}")
-
-
 @app.on_event("startup")
 async def startup_event():
-    asyncio.create_task(listen_redis())
+    asyncio.create_task(redis.listen_redis())
     print("Starting up...")
 
 

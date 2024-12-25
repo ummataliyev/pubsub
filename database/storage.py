@@ -2,7 +2,10 @@
 Storage registration
 """
 import typing
+
 from motor import motor_asyncio
+
+from config import settings
 
 
 class MongoDB:
@@ -22,4 +25,4 @@ class MongoDB:
         return [msg["message"] for msg in messages]
 
 
-processor = MongoDB("mongodb://localhost:27017")
+processor = MongoDB(settings.MONGODB_URI)

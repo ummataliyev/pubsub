@@ -1,0 +1,15 @@
+aioredis==2.0.1
+backports.tarfile==1.2.0
+fastapi==0.112.1
+faststream==0.5.18
+importlib-metadata==8.0.0
+importlib-resources==6.4.0
+jaraco.text==3.12.1
+motor==3.5.1
+ordered-set==4.1.0
+packaging==24.1
+pip-chill==1.0.3
+platformdirs==4.2.2
+redis==5.0.8
+tomli==2.0.1
+uvicorn==0.30.6
