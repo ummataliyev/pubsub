@@ -1,11 +1,12 @@
+"""Redis Pub/Sub consumer utilities."""
 import asyncio
 
 from contextlib import suppress
 
 from redis.asyncio import Redis
 
-from config import settings
-from database import storage
+from config.settings import settings
+import database.storage as storage
 
 
 redis_client = Redis(
@@ -17,6 +18,10 @@ redis_client = Redis(
 
 
 async def listen_redis():
+    """Listen to Redis channel and persist incoming messages.
+
+    :return: None
+    """
     pubsub = redis_client.pubsub()
     await pubsub.subscribe(settings.REDIS_CHANNEL)
 
