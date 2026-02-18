@@ -1,49 +1,73 @@
-"""
-App instance
-"""
-import fastapi
+"""App instance."""
 import asyncio
-import pydantic
-from redis.asyncio import Redis
+from contextlib import suppress
+from typing import Optional
 
-from database import storage
+import fastapi
+import pydantic
+
+from config import settings
 from database import redis
+from database import storage
 
 app = fastapi.FastAPI()
-
-redis_client = Redis(host='localhost', port=6379, db=0)
+listener_task: Optional[asyncio.Task] = None
 
 
 class PublishMessage(pydantic.BaseModel):
-    message: str
+    message: str = pydantic.Field(min_length=1, max_length=5000)
 
 
-@app.post("/publish/")
+@app.post("/publish/", status_code=202)
 async def publish_message(data: PublishMessage):
     try:
-        await redis_client.publish("messages", data.message)
-
-        return {"status": "Message published and saved"}
-    except Exception as e:
-        raise fastapi.HTTPException(status_code=500, detail=str(e))
+        await redis.redis_client.publish(settings.REDIS_CHANNEL, data.message)
+        return {"status": "accepted"}
+    except Exception as exc:
+        raise fastapi.HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.get("/messages/")
-async def get_messages():
+async def get_messages(
+    limit: int = fastapi.Query(
+        settings.DEFAULT_MESSAGES_LIMIT,
+        ge=1,
+        le=settings.MAX_MESSAGES_LIMIT,
+    ),
+    cursor: str | None = None,
+):
     try:
-        messages = await storage.processor.get_messages()
-        return {"messages": messages}
-    except Exception as e:
-        raise fastapi.HTTPException(status_code=500, detail=str(e))
+        messages, next_cursor = await storage.processor.get_messages(limit=limit, cursor=cursor)
+        return {"messages": messages, "next_cursor": next_cursor}
+    except ValueError as exc:
+        raise fastapi.HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise fastapi.HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/health/")
+async def health_check():
+    try:
+        redis_ok = await redis.redis_client.ping()
+        mongo_ok = await storage.processor.ping()
+        return {"redis": bool(redis_ok), "mongo": bool(mongo_ok)}
+    except Exception as exc:
+        raise fastapi.HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.on_event("startup")
 async def startup_event():
-    asyncio.create_task(redis.listen_redis())
-    print("Starting up...")
+    global listener_task
+    await storage.processor.ensure_indexes()
+    listener_task = asyncio.create_task(redis.listen_redis())
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    await redis_client.close()
-    print("Shutting down...")
+    if listener_task:
+        listener_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await listener_task
+
+    await redis.redis_client.aclose()
+    storage.processor.close()

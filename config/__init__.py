@@ -1,1 +1,2 @@
-from .settings import * # noqa
+from .settings import Settings
+from .settings import settings
